@@ -3,6 +3,7 @@ package main
 import (
   "bytes"
   "encoding/json"
+  "errors"
   "io"
   "log"
   "net/http"
@@ -11,6 +12,7 @@ import (
 )
 
 var MODEL_ENDPOINT = "http://localhost:11434/api/chat"
+var SKILLS_DIR     = "skills"
 
 type FunctionAction func(input string) ([]string, error)
 
@@ -88,6 +90,34 @@ func find_music(category string) ([]string, error) {
   return []string{"karnatic", "hindustani", "rai"}, nil
 }
 
+func find_skills(description string) ([]string, error) {
+  var skills []string
+  SkillsDir, err := os.Open(SKILLS_DIR)
+  if err != nil {
+    // No skills directory, so likely no skills
+    return skills, errors.New("No skills directory found")
+  }
+
+  _skills, err := SkillsDir.Readdir(-1)
+  defer SkillsDir.Close()
+
+  if err != nil {
+    // Skills directory doesn't contain any skills - exit without doing anything
+    return skills, errors.New("No skills found in skill directory")
+  }
+
+  for _, _skill := range _skills {
+    log.Printf("Found skill: " + _skill.Name())
+    skills = append(skills, _skill.Name())
+  }
+
+  return []string{"I have added the following additional skills that may be relevant to your request: " + strings.Join(skills, ", ")}, nil
+}
+
+// Placeholder for skills
+var SKILLS = []TOOL{}
+
+// Basic tools that are packaged with the basic harness.
 var TOOLS = []TOOL{
   {
     Type: "function",
@@ -123,6 +153,24 @@ var TOOLS = []TOOL{
         Required: []string{"path"},
       },
       Action: find_music,
+    },
+  },
+  {
+    Type: "function",
+    Function: FUNCTION {
+      Name:           "more_tools",
+      Description:    "Check for additional tools. Choose this tool if existing tools provided to you are inadequate to answer the users request",
+      Parameters: PARAMETERS{
+        Type: "skills",
+        Properties: map[string]map[string]string{
+          "path": {
+            "category":       "string",
+            "description":    "Skill finder from user defined skills",
+          },
+        },
+        Required: []string{"path"},
+      },
+      Action: find_skills,
     },
   },
 }
@@ -229,8 +277,12 @@ func main() {
 
   MessageHistory := []MESSAGE{
     {
+      Role: "system",
+      Content: "Try to answer the users question to the best of your abilities using the existing tools that are provided. Remember that there are other tools as well, that can be provided on demand. If none of the existing tools provided look appropriate to handle the users question, ask the harness for a list of additional tools to help you handle the user question. If you ask for additional tools with a brief summary of what you are looking for, the harness should send you back an addtional list of tools that you can use. You can search for additional tools by using the 'more_tools' tool - send a request back to that tool with a search term, and you should get back additional tools that you can use to answer the users question",
+    },
+    {
       Role: "user",
-      Content: "Give me a classical song",
+      Content: "Find new emails from Pinju",
     },
   }
 
