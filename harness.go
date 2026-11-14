@@ -3,11 +3,11 @@ package main
 import (
   "bytes"
   "encoding/json"
-  "errors"
   "io"
   "log"
   "net/http"
   "os"
+  "blaiddddrwg/go-harness/skills"
   "strings"
 )
 
@@ -90,28 +90,48 @@ func find_music(category string) ([]string, error) {
   return []string{"karnatic", "hindustani", "rai"}, nil
 }
 
+func execute(instructions string) ([]string, error) {
+  log.Printf("Executing skill with instructions: %s", instructions)
+  return []string{"one", "two", "three"}, nil
+}
+
+// Ideally, we should use some kind of vector search to find the best skill, but
+// for now, we will just return ALL the skills
 func find_skills(description string) ([]string, error) {
-  var skills []string
-  SkillsDir, err := os.Open(SKILLS_DIR)
+  skills, err := skill.FindSkills(SKILLS_DIR)
   if err != nil {
-    // No skills directory, so likely no skills
-    return skills, errors.New("No skills directory found")
+    log.Printf("Got error trying to find skills: %s", err)
+    return nil, err
   }
 
-  _skills, err := SkillsDir.Readdir(-1)
-  defer SkillsDir.Close()
-
-  if err != nil {
-    // Skills directory doesn't contain any skills - exit without doing anything
-    return skills, errors.New("No skills found in skill directory")
+  var skillNames []string
+  for _, skill := range skills {
+    skillNames = append(skillNames, skill.Name())
+    // Then add the skill to the set of tools that will get returned.
+    SKILLS = append(SKILLS, TOOL{
+      Type: "function",
+      Function: FUNCTION{
+        Name:        skill.Name(),
+        Description: skill.Description(),
+        Parameters: PARAMETERS{
+          Type: "object",
+          Properties: map[string]map[string]string{
+            "path": {
+              "type":        "string",
+              "description": "Instructions for executing the skill",
+            },
+          },
+          Required: []string{"path"},
+        },
+        Action: execute,
+      },
+    })
   }
 
-  for _, _skill := range _skills {
-    log.Printf("Found skill: " + _skill.Name())
-    skills = append(skills, _skill.Name())
-  }
-
-  return []string{"I have added the following additional skills that may be relevant to your request: " + strings.Join(skills, ", ")}, nil
+  log.Print("---------------------------------------------------------------")
+  log.Printf("Returning skills: %s", strings.Join(skillNames, ","))
+  log.Print("---------------------------------------------------------------")
+  return skillNames, nil
 }
 
 // Placeholder for skills
@@ -323,7 +343,7 @@ func main() {
       resp, err = model_call(client, CHAT_REQUEST{
         Model: "qwen3.5:9b",
         Messages: MessageHistory,
-        Tools:  TOOLS,
+        Tools:  append(TOOLS, SKILLS...),
         Stream: false,
       })
       if err != nil {

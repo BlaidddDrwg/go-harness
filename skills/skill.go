@@ -2,11 +2,11 @@ package skill
 
 import (
   "bufio"
+  "errors"
+  "log"
   "os"
   "strings"
 )
-
-// Given the skill directory, parse out the skill into something that we can use
 
 type Skill struct {
   name string
@@ -61,4 +61,50 @@ func initializeSkill(skillDirectory string) (*Skill, error) {
   }
 
   return &Skill{ name, description, payload }, nil
+}
+
+func FindSkills(skillsDir string) ([]*Skill, error) {
+  var skills []*Skill
+  log.Print("----------------------------------------------------------------")
+  log.Printf("Searching directory: %s", skillsDir)
+  log.Print("----------------------------------------------------------------")
+  SkillsDir, err := os.Open(skillsDir)
+  if err != nil {
+    // No skills directory, so likely no skills
+    return skills, errors.New("No skills directory found")
+  }
+
+  _skills, err := SkillsDir.Readdir(-1)
+  defer SkillsDir.Close()
+
+  if err != nil {
+    // Skills directory doesn't contain any skills - exit without doing anything
+    return skills, errors.New("No skills found in skill directory")
+  }
+
+  for _, _skill := range _skills {
+    log.Print("Found: " + _skill.Name())
+    if err != nil {
+      log.Printf("Couldn't stat info for file: %s\n", _skill.Name())
+      continue
+    }
+
+    if _skill.IsDir() {
+      log.Printf("Found skill: %s", _skill.Name())
+      skill, err := initializeSkill(skillsDir + "/" + _skill.Name())
+
+      if err != nil {
+        log.Printf("Error while trying to initialize skill: %s", _skill.Name())
+        continue
+      }
+
+      if skill != nil {
+        skills = append(skills, skill)
+      } else {
+        log.Printf("Could not initialize skill [%s]", _skill.Name())
+      }
+    }
+  }
+
+  return skills, nil
 }
